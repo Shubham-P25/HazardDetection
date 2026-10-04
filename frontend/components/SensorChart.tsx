@@ -1,0 +1,3 @@
+'use client';
+import dynamic from 'next/dynamic'; const Chart=dynamic(()=>import('react-apexcharts'),{ssr:false});
+export function SensorChart({title,data,color,unit}:{title:string;data:{x:string;y:number}[];color:string;unit:string}){return <div className="panel chart-box"><div className="panel-title"><h2>{title}</h2><span className="unit">{unit}</span></div><Chart options={{chart:{type:'area',toolbar:{show:false},sparkline:{enabled:true}},colors:[color],stroke:{curve:'smooth',width:3},fill:{type:'gradient',gradient:{opacityFrom:.3,opacityTo:.03}},xaxis:{type:'datetime'},dataLabels:{enabled:false},tooltip:{x:{format:'HH:mm:ss'}}}} series={[{name:title,data:data.map((point)=>({x:new Date(point.x).getTime(),y:point.y}))}]} type="area" height={160}/></div>}

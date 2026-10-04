@@ -1,0 +1,28 @@
+export const zones = {
+  viewBox: '0 0 1200 800',
+  rooms: [
+    { id: 'receiving', name: 'Receiving', x: 40, y: 40, w: 220, h: 150 },
+    { id: 'raw-material', name: 'Raw Material Store', x: 270, y: 40, w: 260, h: 150 },
+    { id: 'peeling', name: 'Peeling', x: 540, y: 40, w: 180, h: 150 },
+    { id: 'crushing', name: 'Crushing', x: 730, y: 40, w: 180, h: 150 },
+    { id: 'blasting', name: 'Blasting', x: 920, y: 40, w: 240, h: 150 },
+    { id: 'forming-cooking', name: 'Forming & Cooking', x: 40, y: 250, w: 300, h: 180 },
+    { id: 'mixing-cooking', name: 'Mixing & Cooking', x: 360, y: 250, w: 300, h: 180 },
+    { id: 'chopping', name: 'Chopping', x: 680, y: 250, w: 230, h: 180 },
+    { id: 'chopping-mixing', name: 'Chopping Mixing', x: 920, y: 250, w: 180, h: 180 },
+    { id: 'food-court', name: 'Food Court', x: 40, y: 500, w: 280, h: 220 },
+    { id: 'toilets', name: 'Toilets / Washroom', x: 340, y: 500, w: 220, h: 220 },
+    { id: 'electrical', name: 'Electrical room', x: 580, y: 500, w: 220, h: 220 },
+    { id: 'corridor', name: 'Walkway', x: 820, y: 500, w: 340, h: 220, corridor: true },
+  ],
+  sensors: [
+    { id: 'gas', field: 'gas', roomId: 'forming-cooking', label: 'G', name: 'Gas' },
+    { id: 'smoke', field: 'smoke', roomId: 'blasting', label: 'S', name: 'Smoke' },
+    { id: 'flame', field: 'flame', roomId: 'raw-material', label: 'F', name: 'Flame' },
+    { id: 'drainage', field: 'drainage', roomId: 'toilets', label: 'D', name: 'Drainage / leak' },
+    { id: 'temperature', field: 'temperature', roomId: 'mixing-cooking', label: 'T', name: 'Temperature' },
+    { id: 'humidity', field: 'humidity', roomId: 'mixing-cooking', label: 'H', name: 'Humidity' },
+    { id: 'heatIndex', field: 'heatIndex', roomId: 'mixing-cooking', label: 'HI', name: 'Heat index' },
+    { id: 'dewPoint', field: 'dewPoint', roomId: 'mixing-cooking', label: 'DP', name: 'Dew point' },
+  ],
+} as const;

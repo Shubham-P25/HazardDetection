@@ -1,0 +1,74 @@
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                   String  @id @default(cuid())
+  clerkId              String  @unique
+  email                String?
+  name                 String?
+  role                 String  @default("viewer")
+  notifyEmail          String?
+  notifyTelegramChatId String?
+}
+
+model Incident {
+  id                    String          @id @default(cuid())
+  sensorField           String
+  zone                  String
+  severity              String
+  peakValue             Float
+  unit                  String
+  thresholdCrossed      String
+  startedAt             DateTime        @default(now())
+  resolvedAt            DateTime?
+  status                String          @default("OPEN")
+  acknowledgedByClerkId String?
+  note                  String?
+  alerts                IncidentAlert[]
+
+  @@index([startedAt])
+  @@index([status])
+  @@index([sensorField, status])
+}
+
+model IncidentAlert {
+  id         String   @id @default(cuid())
+  incidentId String
+  incident   Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  channel    String
+  recipient  String
+  status     String
+  error      String?
+  sentAt     DateTime @default(now())
+
+  @@index([incidentId])
+}
+
+model AlertLog {
+  id         String   @id @default(cuid())
+  incidentId String?
+  channel    String
+  message    String
+  success    Boolean
+  error      String?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model ComplianceRecord {
+  id            String   @id @default(cuid())
+  date          DateTime
+  zone          String
+  safeMinutes   Int      @default(0)
+  unsafeMinutes Int      @default(0)
+
+  @@unique([date, zone])
+}

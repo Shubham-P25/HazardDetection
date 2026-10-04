@@ -1,0 +1,45 @@
+const csv = (value, fallback) => (value || fallback).split(',').map((item) => item.trim()).filter(Boolean);
+
+const topicPrefix = process.env.MQTT_TOPIC_PREFIX || '';
+const mqttTopic = process.env.MQTT_TOPIC
+  || (topicPrefix ? `${topicPrefix.replace(/\/$/, '')}/sensors` : 'hazard/sensors');
+
+module.exports = {
+  PORT: Number(process.env.PORT || 4000),
+  FRONTEND_ORIGINS: csv(process.env.FRONTEND_ORIGIN, 'http://localhost:3000,http://localhost:5173'),
+  DATABASE_URL: process.env.DATABASE_URL,
+  INGEST_API_KEY: process.env.INGEST_API_KEY,
+  MQTT_BROKER: process.env.MQTT_BROKER || 'mqtt://broker.hivemq.com',
+  MQTT_TOPIC: mqttTopic,
+  MQTT_TOPIC_PREFIX: topicPrefix,
+  MQTT_ENABLED: process.env.MQTT_ENABLED !== 'false',
+  MQTT_USERNAME: process.env.MQTT_USERNAME,
+  MQTT_PASSWORD: process.env.MQTT_PASSWORD,
+  FLAME_ACTIVE_LOW: process.env.FLAME_ACTIVE_LOW === 'true',
+  RAIN_ACTIVE_LOW: process.env.RAIN_ACTIVE_LOW === 'true',
+  STALE_AFTER_MS: Number(process.env.STALE_AFTER_MS || 10000),
+  ML_SERVICE_URL: process.env.ML_SERVICE_URL,
+  INFLUX_URL: process.env.INFLUX_URL,
+  INFLUX_TOKEN: process.env.INFLUX_TOKEN,
+  INFLUX_ORG: process.env.INFLUX_ORG,
+  INFLUX_BUCKET: process.env.INFLUX_BUCKET,
+  THINGSPEAK_WRITE_KEY: process.env.THINGSPEAK_WRITE_KEY,
+  TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
+  TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID,
+  EMAIL_USER: process.env.EMAIL_USER,
+  EMAIL_PASS: process.env.EMAIL_PASS,
+  EMAIL_TO: process.env.EMAIL_TO,
+  GOOGLE_SHEETS_ID: process.env.GOOGLE_SHEETS_ID,
+  GOOGLE_SHEETS_TAB: process.env.GOOGLE_SHEETS_TAB || 'Sheet1',
+  GOOGLE_CREDENTIALS_PATH: process.env.GOOGLE_CREDENTIALS_PATH,
+  CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY,
+  CLERK_PUBLISHABLE_KEY: process.env.CLERK_PUBLISHABLE_KEY || process.env.VITE_CLERK_PUBLISHABLE_KEY,
+  SIMULATOR: process.env.SIMULATOR === 'true',
+  DEFAULT_DEVICE_ID: process.env.DEFAULT_DEVICE_ID || 'node-1',
+  MQ2_R0: Number(process.env.MQ2_R0 || 10),
+  MQ2_RL: Number(process.env.MQ2_RL || 5),
+  MQ2_VC: Number(process.env.MQ2_VC || 5),
+  THINGSPEAK_INTERVAL_MS: 15000,
+  RISK_THRESHOLDS: { warning: 41, danger: 66, critical: 86 },
+  SENSOR_THRESHOLDS: { gasWarning: 200, gasCritical: 600, temperatureWarning: 38, temperatureCritical: 48 },
+};

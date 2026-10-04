@@ -1,0 +1,25 @@
+module.exports = {
+  hysteresisMargin: 0.08,
+  consecutiveToRaise: 2,
+  drainageWetCriticalMs: 5 * 60 * 1000,
+  autoResolveMs: 60_000,
+  deviceOfflineMs: 10_000,
+  alertReminderMs: 10 * 60 * 1000,
+  fields: {
+    gas: { warning: 300, danger: 1000, critical: 2000, unit: 'ppm', label: 'Gas' },
+    smoke: { warning: 100, danger: 300, critical: 600, unit: 'ppm', label: 'Smoke' },
+    temperature: { warning: 35, danger: 42, critical: 48, unit: '°C', label: 'Temperature' },
+    humidity: {
+      warningHigh: 75,
+      warningLow: 25,
+      dangerHigh: 85,
+      dangerLow: 20,
+      unit: '%',
+      label: 'Humidity',
+    },
+    flame: { critical: 1, unit: '', label: 'Flame' },
+    drainage: { danger: 1, unit: '', label: 'Drainage / leak' },
+    heatIndex: { warning: 38, danger: 45, critical: 52, unit: '°C', label: 'Heat index' },
+    dewPoint: { warning: 22, danger: 26, unit: '°C', label: 'Dew point' },
+  },
+};
