@@ -1,4 +1,5 @@
 require('dotenv').config();
+const crypto = require('crypto');
 const express = require('express');
 const http = require('http');
 const cors = require('cors');
@@ -28,14 +29,29 @@ let shuttingDown = false;
 
 function validateConfig() {
   if (!config.DATABASE_URL) throw new Error('Missing required configuration: DATABASE_URL');
-  if (config.INGEST_API_KEY === 'CHANGE_ME') throw new Error('INGEST_API_KEY must be replaced with a real secret');
+  // B1: fail at startup if ingest key is missing, empty, or placeholder
+  const key = config.INGEST_API_KEY;
+  if (!key || key === 'CHANGE_ME' || key.trim() === '') {
+    throw new Error('INGEST_API_KEY must be set to a real secret (generate with: node -e "console.log(require(\'crypto\').randomBytes(24).toString(\'hex\'))") ');
+  }
   if (config.MQTT_BROKER.includes('hivemq.com') && (config.MQTT_TOPIC === 'hazard/sensors' || !config.MQTT_TOPIC_PREFIX)) {
     console.warn('[security] broker.hivemq.com is public. Set MQTT_TOPIC_PREFIX to a unique value (example: hazardguard/<random-id>) and update the NodeMCU to the same topic. Longer term, use a private broker with username and password.');
   }
 }
 
 function requireIngestKey(req, res, next) {
-  if (req.get('x-api-key') !== config.INGEST_API_KEY) return res.status(401).json({ error: 'Invalid ingest API key' });
+  const provided = req.get('x-api-key');
+  const expected = config.INGEST_API_KEY;
+  // Both must be non-empty strings of the same length for timingSafeEqual
+  if (!provided || !expected || provided.length !== expected.length) {
+    return res.status(401).json({ error: 'Invalid ingest API key' });
+  }
+  try {
+    const match = crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
+    if (!match) return res.status(401).json({ error: 'Invalid ingest API key' });
+  } catch {
+    return res.status(401).json({ error: 'Invalid ingest API key' });
+  }
   next();
 }
 
@@ -57,10 +73,7 @@ app.use('/api/sensors', sensorRoutes);
 app.use('/api/incidents', incidentRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api', analyticsRoutes);
-app.get('/health', (req, res) => {
-  req.url = '/health';
-  healthRoutes(req, res, () => res.status(404).end());
-});
+// B2: remove hacky /health rewrite; health is served by healthRoutes under /api/health
 app.use((error, _req, res, _next) => {
   console.error('Request error:', error.message);
   if (error.message === 'Unauthorized') return res.status(401).json({ error: 'Unauthorized' });
@@ -83,7 +96,8 @@ async function shutdown(signal) {
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('uncaughtException', (error) => { console.error('Uncaught exception:', error); shutdown('uncaughtException'); });
-process.on('unhandledRejection', (error) => { console.error('Unhandled rejection:', error); shutdown('unhandledRejection'); });
+// B6: log but keep running – a Telegram timeout or Prisma hiccup must not kill the server
+process.on('unhandledRejection', (reason) => { console.error('Unhandled rejection (non-fatal):', reason); });
 
 async function start() {
   validateConfig();

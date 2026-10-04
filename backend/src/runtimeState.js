@@ -1,3 +1,6 @@
+﻿// Ring buffer size for sensor history (C1)
+const BUFFER_SIZE = 120;
+
 const state = {
   mqttConnected: false,
   mqttTopic: null,
@@ -6,7 +9,16 @@ const state = {
   lastEmitAt: null,
   simulator: false,
   mqttClient: null,
+  // C1: last 120 readings for snapshot on new socket connection
+  readingBuffer: [],
 };
+
+function pushToBuffer(reading) {
+  state.readingBuffer.push(reading);
+  if (state.readingBuffer.length > BUFFER_SIZE) {
+    state.readingBuffer.shift();
+  }
+}
 
 function snapshot(io) {
   return {
@@ -17,4 +29,4 @@ function snapshot(io) {
   };
 }
 
-module.exports = { state, snapshot };
+module.exports = { state, snapshot, pushToBuffer };

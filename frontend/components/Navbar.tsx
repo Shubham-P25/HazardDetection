@@ -16,7 +16,7 @@ const items = [
 export function Navbar() {
   const path = usePathname();
   const openCount = useSensorStore((s) => s.openIncidentCount);
-  const clerkOn = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || process.env.VITE_CLERK_PUBLISHABLE_KEY);
+  const clerkOn = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
   return (
     <>

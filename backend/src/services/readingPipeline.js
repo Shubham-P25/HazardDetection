@@ -1,4 +1,4 @@
-const { calculateRiskScore, getRiskLevel } = require('./riskScore');
+﻿const { calculateRiskScore, getRiskLevel, computeRisk } = require('./riskScore');
 const { checkAnomaly } = require('./anomalyClient');
 const { writeInflux } = require('../influx');
 const { processAlert } = require('./alertEngine');
@@ -6,18 +6,20 @@ const { updateCompliance } = require('./compliance');
 const { pushThingSpeak } = require('./thingspeak');
 const { normalizeReading } = require('./normalizeReading');
 const { evaluateStatuses } = require('./statusEngine');
-const { state } = require('../runtimeState');
+const { state, pushToBuffer } = require('../runtimeState');
 const zones = require('../config/zones');
 
-const drainageWetSince = { at: null };
+// C7: key drainageWetSince by deviceId
+const drainageWetSinceMap = new Map();
 
-function drainageWetMs(drainage, now) {
+function drainageWetMs(deviceId, drainage, now) {
+  const key = deviceId || 'default';
   if (!drainage) {
-    drainageWetSince.at = null;
+    drainageWetSinceMap.delete(key);
     return 0;
   }
-  drainageWetSince.at ||= now;
-  return now - drainageWetSince.at;
+  if (!drainageWetSinceMap.has(key)) drainageWetSinceMap.set(key, now);
+  return now - drainageWetSinceMap.get(key);
 }
 
 function attachRoomStatuses(reading, statuses) {
@@ -37,57 +39,68 @@ function attachRoomStatuses(reading, statuses) {
   return rooms;
 }
 
+// C4: last known anomaly result – applied on the NEXT reading
+let lastAnomaly;
+
 async function processReading(input, { io, prisma }) {
   const reading = normalizeReading(input);
-  const extra = { drainageWetMs: drainageWetMs(reading.drainage, Date.now()) };
-  const { statuses, worst } = evaluateStatuses(reading, extra);
-  const riskScore = calculateRiskScore(reading, statuses);
+  const devId = reading.deviceId;
+  const extra = { drainageWetMs: drainageWetMs(devId, reading.drainage, Date.now()) };
+  // C7: keyed by deviceId
+  const { statuses, worst } = evaluateStatuses(reading, extra, devId);
+
+  // C4: use one computeRisk function for both live emit and Influx
+  const riskScore = computeRisk(reading, statuses, lastAnomaly);
+  const riskLevel = worst;
+
   const data = {
     ...reading,
     statuses,
     roomStatuses: attachRoomStatuses(reading, statuses),
     risk: riskScore,
     riskScore,
-    riskLevel: worst,
+    riskLevel,
+    anomaly: lastAnomaly,
   };
 
   state.lastMessageAt = new Date().toISOString();
   state.lastReading = data;
+  // C1: push into ring buffer for snapshot
+  pushToBuffer(data);
+
   io?.emit('sensor:update', data);
   io?.emit('sensorUpdate', data);
   state.lastEmitAt = Date.now();
 
+  // C4: fire alerts and Influx IMMEDIATELY, call ML in parallel
+  // Do NOT await anomaly before starting alerts
   const persist = async () => {
-    const anomaly = await checkAnomaly({
+    // Start these immediately with current statuses
+    const alertPromise = processAlert(data, prisma, io).catch((error) => console.error('Alert error:', error.message));
+    const compliancePromise = updateCompliance(data, prisma).catch((error) => console.error('Compliance error:', error.message));
+    const influxPromise = writeInflux(data).catch((error) => console.error('History write error:', error.message));
+    const thingspeakPromise = pushThingSpeak({
       mq2: reading.mq2,
       temperature: reading.temperature,
       humidity: reading.humidity,
       flame: reading.flame,
       rain: reading.drainage,
+    });
+
+    // ML runs in parallel; result used for NEXT reading's risk score
+    checkAnomaly({
+      mq2: reading.mq2,
+      temperature: reading.temperature,
+      humidity: reading.humidity,
+      flame: reading.flame,
+      rain: reading.drainage,
+    }).then((anomaly) => {
+      lastAnomaly = anomaly;
     }).catch((error) => {
       console.error('ML service error:', error.message);
-      return undefined;
     });
-    if (anomaly !== undefined) data.anomaly = anomaly;
-    data.riskScore = calculateRiskScore(reading, statuses, anomaly);
-    data.risk = data.riskScore;
-    data.riskLevel = getRiskLevel(data.riskScore).level === 'SAFE' ? worst : (
-      ['SAFE', 'WARNING', 'DANGER', 'CRITICAL'].indexOf(getRiskLevel(data.riskScore).level) > ['SAFE', 'WARNING', 'DANGER', 'CRITICAL'].indexOf(worst)
-        ? getRiskLevel(data.riskScore).level
-        : worst
-    );
-    await Promise.allSettled([
-      writeInflux(data).catch((error) => console.error('History write error:', error.message)),
-      pushThingSpeak({
-        mq2: reading.mq2,
-        temperature: reading.temperature,
-        humidity: reading.humidity,
-        flame: reading.flame,
-        rain: reading.drainage,
-      }),
-      processAlert(data, prisma, io).catch((error) => console.error('Alert error:', error.message)),
-      updateCompliance(data, prisma).catch((error) => console.error('Compliance error:', error.message)),
-    ]);
+
+    await Promise.allSettled([alertPromise, compliancePromise, influxPromise, thingspeakPromise]);
   };
 
   persist().catch((error) => console.error('Background persist error:', error.message));

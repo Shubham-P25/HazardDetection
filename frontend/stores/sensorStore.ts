@@ -1,17 +1,20 @@
-'use client';
+﻿'use client';
 
 import { create } from 'zustand';
 import type { ConnectionState, Incident, SensorReading } from '@/types';
-import { thresholds } from '@/config/sensors';
 
-const N = 120;
+const N = 120; // ring buffer size
 let raf = 0;
 let pending: SensorReading | null = null;
 
-function ageLabel(at: number | null) {
-  if (!at) return '';
-  const seconds = Math.max(0, Math.round((Date.now() - at) / 1000));
-  return `${seconds} s ago`;
+// C2: derive connection state from socket connection + last message time
+const DEVICE_OFFLINE_MS = 10_000;
+
+function deriveConnection(socketConnected: boolean, lastMessageAt: number | null): ConnectionState {
+  if (!socketConnected) return 'disconnected';
+  if (!lastMessageAt) return 'connecting';
+  if (Date.now() - lastMessageAt > DEVICE_OFFLINE_MS) return 'device-offline';
+  return 'live';
 }
 
 export const useSensorStore = create<{
@@ -19,13 +22,15 @@ export const useSensorStore = create<{
   history: SensorReading[];
   incidents: Incident[];
   connection: ConnectionState;
+  socketConnected: boolean;    // C2: explicit socket connected flag
   lastMessageAt: number | null;
-  lastAge: string;
   simulated: boolean;
   latencyMs: number | null;
   openIncidentCount: number;
+  setSocketConnected: (connected: boolean) => void;
   setConnection: (connection: ConnectionState) => void;
   pushReading: (reading: SensorReading) => void;
+  seedHistory: (readings: SensorReading[]) => void;  // C1
   upsertIncident: (incident: Incident) => void;
   setIncidents: (incidents: Incident[]) => void;
   tick: () => void;
@@ -34,21 +39,31 @@ export const useSensorStore = create<{
   history: [],
   incidents: [],
   connection: 'connecting',
+  socketConnected: false,
   lastMessageAt: null,
-  lastAge: '',
   simulated: false,
   latencyMs: null,
   openIncidentCount: 0,
+
+  // C2: set socketConnected and immediately derive connection
+  setSocketConnected: (socketConnected) => set((state) => ({
+    socketConnected,
+    connection: deriveConnection(socketConnected, state.lastMessageAt),
+  })),
+
+  // Kept for compatibility
   setConnection: (connection) => set({ connection }),
+
   pushReading: (reading) => {
     pending = {
       ...reading,
       ts: reading.ts || reading.timestamp || new Date().toISOString(),
-      drainage: reading.drainage ?? reading.rain ?? 0,
-      gas: reading.gas ?? 0,
-      smoke: reading.smoke ?? 0,
-      heatIndex: reading.heatIndex ?? 0,
-      dewPoint: reading.dewPoint ?? 0,
+      // C3: use null for missing values so chart lines break properly
+      drainage: reading.drainage ?? reading.rain ?? null,
+      gas: reading.gas ?? null,
+      smoke: reading.smoke ?? null,
+      heatIndex: reading.heatIndex ?? null,
+      dewPoint: reading.dewPoint ?? null,
       risk: reading.risk ?? reading.riskScore ?? 0,
       riskScore: reading.riskScore ?? reading.risk ?? 0,
     };
@@ -62,17 +77,36 @@ export const useSensorStore = create<{
         ? Date.now() - next.serverTs
         : null;
       const history = [...get().history, next].slice(-N);
+      const lastMessageAt = Date.now();
       set({
         current: next,
         history,
-        lastMessageAt: Date.now(),
-        lastAge: '0 s ago',
+        lastMessageAt,
         simulated: Boolean(next.simulated),
         latencyMs,
-        connection: 'live',
+        // C2: derive connection immediately
+        connection: deriveConnection(get().socketConnected, lastMessageAt),
       });
     });
   },
+
+  // C1: seed history from server snapshot without overwriting newer readings
+  seedHistory: (readings) => set((state) => {
+    if (state.history.length > 0) return {}; // already seeded by live data
+    const seeded = readings.slice(-N).map((r: any) => ({
+      ...r,
+      ts: r.ts || r.timestamp || new Date().toISOString(),
+      drainage: r.drainage ?? r.rain ?? null,
+      gas: r.gas ?? null,
+      smoke: r.smoke ?? null,
+      heatIndex: r.heatIndex ?? null,
+      dewPoint: r.dewPoint ?? null,
+      risk: r.risk ?? r.riskScore ?? 0,
+      riskScore: r.riskScore ?? r.risk ?? 0,
+    }));
+    return { history: seeded, current: seeded[seeded.length - 1] || state.current };
+  }),
+
   upsertIncident: (incident) => set((state) => {
     const incidents = [incident, ...state.incidents.filter((item) => item.id !== incident.id)].slice(0, 100);
     return {
@@ -80,21 +114,15 @@ export const useSensorStore = create<{
       openIncidentCount: incidents.filter((item) => item.status === 'OPEN' || item.status === 'ACKNOWLEDGED' || (!item.status && !item.resolvedAt)).length,
     };
   }),
+
   setIncidents: (incidents) => set({
     incidents,
     openIncidentCount: incidents.filter((item) => item.status === 'OPEN' || item.status === 'ACKNOWLEDGED').length,
   }),
+
+  // C3: tick only updates connection state - no lastAge (moved to ConnectionPill local state)
   tick: () => {
-    const last = get().lastMessageAt;
-    const connected = get().connection !== 'disconnected';
-    if (!connected) {
-      set({ lastAge: ageLabel(last) });
-      return;
-    }
-    if (!last || Date.now() - last > thresholds.deviceOfflineMs) {
-      set({ connection: 'device-offline', lastAge: ageLabel(last) });
-      return;
-    }
-    set({ connection: 'live', lastAge: ageLabel(last) });
+    const { socketConnected, lastMessageAt } = get();
+    set({ connection: deriveConnection(socketConnected, lastMessageAt) });
   },
 }));

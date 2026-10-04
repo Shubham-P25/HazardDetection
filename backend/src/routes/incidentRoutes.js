@@ -28,7 +28,7 @@ router.patch('/:id/acknowledge', requireRole('admin', 'operator'), async (req, r
   try {
     const incident = await req.prisma.incident.update({
       where: { id: req.params.id },
-      data: { status: 'ACKNOWLEDGED', acknowledgedByClerkId: req.auth?.userId || 'operator' },
+      data: { status: 'ACKNOWLEDGED', acknowledgedByClerkId: req.clerk?.userId || 'operator' },
       include: { alerts: true },
     });
     req.io?.emit('incident:update', incident);

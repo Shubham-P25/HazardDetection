@@ -1,14 +1,14 @@
-'use client';
+﻿'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { ClerkProvider, useAuth } from '@clerk/nextjs';
 import { useSocket } from '@/hooks/useSocket';
 import { Navbar } from '@/components/Navbar';
+import { setTokenGetter } from '@/lib/api';
+import { setSocketTokenGetter } from '@/lib/socket';
 
-const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
-  || process.env.VITE_CLERK_PUBLISHABLE_KEY
-  || '';
+const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || '';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   if (!publishableKey) {
@@ -28,23 +28,25 @@ function Shell({ children }: { children: React.ReactNode }) {
 }
 
 function LocalShell({ children }: { children: React.ReactNode }) {
-  useSocket(null);
+  useSocket();
   return <Shell>{children}</Shell>;
 }
 
+// B5: no token state – getToken() is called fresh on each request via setter
 function AuthedShell({ children }: { children: React.ReactNode }) {
   const { getToken } = useAuth();
-  const [token, setToken] = useState<string | null>(null);
+
   useEffect(() => {
-    let refresh: number;
-    async function load() {
-      const value = await getToken().catch(() => null);
-      setToken(value);
-    }
-    load();
-    refresh = window.setInterval(load, 50_000);
-    return () => window.clearInterval(refresh);
+    // Register token getter for both API and socket; called fresh per request
+    const getter = () => getToken().catch(() => null);
+    setTokenGetter(getter);
+    setSocketTokenGetter(getter);
+    return () => {
+      setTokenGetter(null as any);
+      setSocketTokenGetter(null);
+    };
   }, [getToken]);
-  useSocket(token);
+
+  useSocket();
   return <Shell>{children}</Shell>;
 }
